@@ -1,0 +1,133 @@
+# docker-compose.yml — Orquestração dos quatro serviços do e-commerce (tarefa 11.2)
+#
+# Sobe Frontend + três backends (Produtos, Carrinho, Pedidos) numa única rede
+# bridge, cada um com Dockerfile próprio. O comando `docker compose up --build`
+# constrói e inicia tudo, disponibilizando o Frontend em http://localhost:3000.
+# (Requisitos 12.1, 12.2, 12.3)
+#
+# Resolução por nome de serviço: todos os contêineres participam da rede
+# `ecommerce-net`; cada serviço é alcançável internamente pelo seu nome de
+# serviço (ex.: http://produtos:3001). O navegador acessa apenas o Frontend em
+# localhost:3000; os nomes internos nunca aparecem no navegador. As portas
+# também são publicadas no host para que cada contêiner possa ser inspecionado
+# individualmente. (Requisitos 10.1, 10.4, 12.1)
+#
+# Nota de resiliência à ordem de inicialização (Requisito 12.6): os serviços
+# requisitantes (Carrinho e Pedidos) NÃO dependem de uma ordem garantida — o
+# cliente HTTP interno aplica retry/backoff e retorna 503 amigável sem derrubar
+# o processo quando um dependente ainda não respondeu. O `depends_on` com
+# `condition: service_healthy` abaixo é apenas uma conveniência de inicialização
+# (sobe primeiro quem alimenta os demais); a aplicação continua correta mesmo
+# que a ordem não fosse respeitada.
+#
+# A chave obsoleta `version` é intencionalmente omitida (Compose Spec moderno).
+
+services:
+  # --- Serviço_Produtos (catálogo + estoque, porta 3001) -------------------
+  produtos:
+    build: ./servico-produtos
+    # Publica a porta no host para inspeção individual do contêiner.
+    ports:
+      - "3001:3001"
+    environment:
+      # Porta configurável lida por server.js (default 3001). (Requisito 12.5)
+      PORT: 3001
+    volumes:
+      # Bind-mount do diretório de dados JSON no diretório do projeto, para que
+      # produtos.json persista entre reinícios de contêiner. (Requisitos 12.4, 9.3)
+      - ./servico-produtos/data:/app/data
+    # Reinicia o contêiner automaticamente, exceto quando parado manualmente. (Req 12.6)
+    restart: unless-stopped
+    networks:
+      - ecommerce-net
+    # Verificação de saúde simples via GET /health (Requisito 12.7). Usa o
+    # wget do BusyBox, presente nas imagens node:alpine (curl pode não existir).
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # --- Serviço_Carrinho (carrinho + frete, porta 3002) ---------------------
+  carrinho:
+    build: ./servico-carrinho
+    ports:
+      - "3002:3002"
+    environment:
+      PORT: 3002
+      # Endereço do Serviço_Produtos por nome de serviço na rede. (Requisito 12.5)
+      PRODUTOS_URL: http://produtos:3001
+    volumes:
+      # Persistência de carrinhos.json via bind-mount. (Requisitos 12.4, 9.3)
+      - ./servico-carrinho/data:/app/data
+    restart: unless-stopped
+    networks:
+      - ecommerce-net
+    # Conveniência de inicialização: aguarda o catálogo ficar saudável. A app
+    # tolera indisponibilidade via retry/503 de qualquer forma. (Req 12.6)
+    depends_on:
+      produtos:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:3002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # --- Serviço_Pedidos (pedidos + pagamento, porta 3003) -------------------
+  pedidos:
+    build: ./servico-pedidos
+    ports:
+      - "3003:3003"
+    environment:
+      PORT: 3003
+      # Endereços dos serviços dependentes por nome de serviço. (Requisito 12.5)
+      PRODUTOS_URL: http://produtos:3001
+      CARRINHO_URL: http://carrinho:3002
+    volumes:
+      # Persistência de pedidos.json via bind-mount. (Requisitos 12.4, 9.3)
+      - ./servico-pedidos/data:/app/data
+    restart: unless-stopped
+    networks:
+      - ecommerce-net
+    # Conveniência de inicialização; a resiliência via retry/503 cobre a ordem. (Req 12.6)
+    depends_on:
+      produtos:
+        condition: service_healthy
+      carrinho:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:3003/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # --- Frontend (React + Vite + nginx, porta 3000) -------------------------
+  frontend:
+    build: ./frontend
+    # Única porta exposta ao usuário final: http://localhost:3000. (Requisito 12.3)
+    ports:
+      - "3000:3000"
+    # O nginx do Frontend encaminha /api/... aos backends usando os NOMES DE
+    # SERVIÇO (produtos/carrinho/pedidos) resolvidos nesta rede; não há env
+    # necessária aqui. É um app estático, portanto sem volume de dados.
+    restart: unless-stopped
+    networks:
+      - ecommerce-net
+    # Sobe após os backends estarem saudáveis para uma primeira carga suave.
+    depends_on:
+      produtos:
+        condition: service_healthy
+      carrinho:
+        condition: service_healthy
+      pedidos:
+        condition: service_healthy
+
+# Rede bridge compartilhada que habilita a resolução por nome de serviço
+# (DNS interno do Docker) entre todos os contêineres. (Requisitos 10.1, 10.4, 12.1)
+networks:
+  ecommerce-net:
+    driver: bridge

@@ -1,0 +1,22 @@
+# Dependências instaladas no host (reinstaladas no build via npm ci)
+node_modules
+npm-debug.log
+
+# Controle de versão e metadados
+.git
+.gitignore
+
+# Testes e config de teste (não vão para a imagem de runtime)
+*.test.js
+*.pbt.test.js
+vitest.config.js
+
+# Dados locais: NÃO embutir o .json de desenvolvimento na imagem.
+# Em runtime o arquivo é montado via bind-mount (docker-compose) e o
+# store.js o cria caso ausente. Mantém-se o .gitkeep para a pasta existir.
+data/*.json
+
+# Metadados de sistema
+.DS_Store
+Dockerfile
+.dockerignore

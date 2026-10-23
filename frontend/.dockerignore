@@ -1,0 +1,23 @@
+# Dependências e artefatos de build gerados dentro da imagem.
+node_modules
+dist
+npm-debug.log
+
+# Controle de versão e metadados
+.git
+.gitignore
+
+# Variáveis de ambiente locais (não embutir na imagem)
+.env
+.env.*
+!.env.example
+
+# Testes (não afetam o build de produção)
+src/**/*.test.jsx
+src/**/*.test.js
+src/test
+
+# Metadados de sistema e Docker
+.DS_Store
+Dockerfile
+.dockerignore
