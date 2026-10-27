@@ -1,27 +1,36 @@
 // ---------------------------------------------------------------------------
-// Tela: Detalhes do produto (rota "/produto/:id")
+// Tela: Detalhes da peça (rota "/produto/:id")
 //
-// Mostra todas as informações do produto (imagem, nome, descrição, categoria,
-// preço, disponibilidade e atributos dinâmicos), com seletor de quantidade e
-// ação "adicionar ao carrinho". Toda operação dependente de backend exibe
-// loading e mensagem final de sucesso/erro.
+// Mostra a peça por inteiro: foto (ou ilustração), marca, nome, etiqueta de
+// preço com economia, tamanho e estado, a "ficha da peça" (dados de vestuário
+// guardados em `atributos`), a história (descrição) e detalhes extras. Permite
+// adicionar à sacola e, na área de bastidores, editar ou excluir a peça.
+// Toda operação dependente de backend exibe loading e mensagem final.
 // (Requisitos 11.4, 11.8, 11.9)
 // ---------------------------------------------------------------------------
 
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { produtos as apiProdutos, carrinho as apiCarrinho } from '../services/api.js';
 import { obterOuCriarCarrinhoId } from '../utils/carrinhoId.js';
+import { avisarSacolaAtualizada } from '../utils/sacolaEventos.js';
 import { formatarReais } from '../utils/formato.js';
+import { CORES, ESTADOS, LIMITE_FRETE_GRATIS, lerPeca, rotuloCor, rotuloEstado } from '../utils/peca.js';
 import Loading from '../components/ui/Loading.jsx';
 import Mensagem from '../components/ui/Mensagem.jsx';
 import Botao from '../components/ui/Botao.jsx';
+import Etiqueta from '../components/ui/Etiqueta.jsx';
+import Icone from '../components/ui/Icone.jsx';
 import ImagemProduto from '../components/ui/ImagemProduto.jsx';
+import SeloEstado from '../components/ui/SeloEstado.jsx';
 import Disponibilidade from '../components/ui/Disponibilidade.jsx';
+import ConfirmarDialogo from '../components/ui/ConfirmarDialogo.jsx';
 
 export default function DetalhesProduto() {
     const { id } = useParams();
     const navegar = useNavigate();
+    // Aviso vindo do formulário (ex.: "Peça cadastrada!").
+    const { state } = useLocation();
 
     const [produto, setProduto] = useState(null);
     const [carregando, setCarregando] = useState(true);
@@ -29,7 +38,10 @@ export default function DetalhesProduto() {
 
     const [quantidade, setQuantidade] = useState(1);
     const [adicionando, setAdicionando] = useState(false);
-    const [feedback, setFeedback] = useState(null); // { tipo, texto }
+    const [feedback, setFeedback] = useState(() =>
+        state?.aviso ? { tipo: 'sucesso', texto: state.aviso, interno: true } : null
+    ); // { tipo, texto, interno? }
+    const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
     const [excluindo, setExcluindo] = useState(false);
 
     useEffect(() => {
@@ -46,7 +58,7 @@ export default function DetalhesProduto() {
                 }
             } catch (e) {
                 if (ativo) {
-                    setErro(e.message || 'Não foi possível carregar o produto.');
+                    setErro(e.message || 'Não foi possível carregar a peça.');
                 }
             } finally {
                 if (ativo) {
@@ -62,15 +74,15 @@ export default function DetalhesProduto() {
     }, [id]);
 
     if (carregando) {
-        return <Loading texto="Carregando produto..." />;
+        return <Loading texto="Carregando a peça..." />;
     }
 
     if (erro) {
         return (
-            <div>
+            <div className="pagina-estreita">
                 <Mensagem tipo="erro">{erro}</Mensagem>
                 <p>
-                    <Link to="/">← Voltar ao catálogo</Link>
+                    <Link to="/">← Voltar à vitrine</Link>
                 </p>
             </div>
         );
@@ -80,19 +92,29 @@ export default function DetalhesProduto() {
         return null;
     }
 
+    const peca = lerPeca(produto);
     const estoque = Number(produto.estoque) || 0;
     const esgotado = estoque <= 0;
-    const atributos = produto.atributos && typeof produto.atributos === 'object'
-        ? Object.entries(produto.atributos)
-        : [];
+    const corHex = CORES[peca.cor]?.hex;
+
+    // Linhas da ficha técnica; campos vazios ficam de fora.
+    const ficha = [
+        ['Marca', peca.marca],
+        ['Tamanho', peca.tamanho],
+        ['Estado', peca.estado && rotuloEstado(peca.estado), ESTADOS[peca.estado]?.descricao],
+        ['Cor', peca.cor && rotuloCor(peca.cor)],
+        ['Tecido', peca.tecido],
+        ['Medidas', peca.medidas],
+        ['Categoria', produto.categoria],
+        ...peca.extras,
+    ].filter(([, valor]) => valor);
 
     function ajustarQuantidade(valor) {
         const n = Number(valor);
         if (!Number.isFinite(n)) {
             return;
         }
-        const limitado = Math.max(1, Math.min(estoque, Math.floor(n)));
-        setQuantidade(limitado);
+        setQuantidade(Math.max(1, Math.min(estoque, Math.floor(n))));
     }
 
     async function adicionar() {
@@ -104,14 +126,18 @@ export default function DetalhesProduto() {
                 produtoId: produto.id,
                 quantidade,
             });
+            avisarSacolaAtualizada();
             setFeedback({
                 tipo: 'sucesso',
-                texto: `${quantidade} × "${produto.nome}" adicionado(s) ao carrinho.`,
+                texto:
+                    quantidade > 1
+                        ? `${quantidade} × "${produto.nome}" foram para a sacola.`
+                        : `"${produto.nome}" foi para a sacola.`,
             });
         } catch (e) {
             setFeedback({
                 tipo: 'erro',
-                texto: e.message || 'Não foi possível adicionar ao carrinho.',
+                texto: e.message || 'Não foi possível adicionar à sacola.',
             });
         } finally {
             setAdicionando(false);
@@ -119,22 +145,18 @@ export default function DetalhesProduto() {
     }
 
     async function excluir() {
-        const confirmado = window.confirm(
-            `Tem certeza que deseja excluir "${produto.nome}"? Esta ação não pode ser desfeita.`
-        );
-        if (!confirmado) {
-            return;
-        }
-
         setExcluindo(true);
         setFeedback(null);
         try {
             await apiProdutos.remover(produto.id);
-            navegar('/');
+            navegar('/acervo', {
+                state: { aviso: `"${produto.nome}" foi removida do acervo.` },
+            });
         } catch (e) {
+            setConfirmandoExclusao(false);
             setFeedback({
                 tipo: 'erro',
-                texto: e.message || 'Não foi possível excluir o produto.',
+                texto: e.message || 'Não foi possível excluir a peça.',
             });
             setExcluindo(false);
         }
@@ -142,86 +164,162 @@ export default function DetalhesProduto() {
 
     return (
         <section className="detalhes">
-            <p className="detalhes__voltar">
-                <Link to="/">← Voltar ao catálogo</Link>
-            </p>
+            <nav className="trilha" aria-label="Você está em">
+                <Link to="/">Vitrine</Link>
+                {produto.categoria && (
+                    <>
+                        <span aria-hidden="true">/</span>
+                        <span>{produto.categoria}</span>
+                    </>
+                )}
+                <span aria-hidden="true">/</span>
+                <span aria-current="page">{produto.nome}</span>
+            </nav>
 
             <div className="detalhes__grade">
                 <div className="detalhes__midia">
-                    <ImagemProduto src={produto.imagemUrl} alt={produto.nome} />
+                    <ImagemProduto
+                        src={produto.imagemUrl}
+                        alt={produto.nome}
+                        categoria={produto.categoria}
+                        cor={peca.cor}
+                    />
+                    {esgotado && <span className="carimbo carimbo--grande">Vendida</span>}
                 </div>
 
                 <div className="detalhes__info">
-                    {produto.categoria && (
-                        <span className="detalhes__categoria">{produto.categoria}</span>
-                    )}
+                    {peca.marca && <p className="sobretitulo">{peca.marca}</p>}
                     <h1 className="detalhes__nome">{produto.nome}</h1>
-                    <p className="detalhes__preco">{formatarReais(produto.preco)}</p>
-                    <Disponibilidade estoque={produto.estoque} />
 
-                    {produto.descricao && (
-                        <p className="detalhes__descricao">{produto.descricao}</p>
+                    <div className="detalhes__selos">
+                        {peca.tamanho && <span className="chip-tamanho chip-tamanho--grande">Tam. {peca.tamanho}</span>}
+                        <SeloEstado estado={peca.estado} />
+                        <Disponibilidade estoque={produto.estoque} />
+                    </div>
+
+                    <Etiqueta preco={produto.preco} precoOriginal={peca.precoOriginal} tamanho="grande" />
+
+                    <div className="detalhes__compra">
+                        {estoque > 1 && (
+                            <label className="seletor-quantidade">
+                                <span>Quantidade</span>
+                                <input
+                                    type="number"
+                                    min={1}
+                                    max={estoque}
+                                    value={quantidade}
+                                    onChange={(e) => ajustarQuantidade(e.target.value)}
+                                />
+                            </label>
+                        )}
+
+                        <Botao
+                            className="botao--largo"
+                            onClick={adicionar}
+                            carregando={adicionando}
+                            disabled={esgotado}
+                        >
+                            {!adicionando && <Icone nome="sacola" tamanho={20} />}
+                            {esgotado ? 'Essa já foi garimpada' : 'Adicionar à sacola'}
+                        </Botao>
+                    </div>
+
+                    {feedback && (
+                        <Mensagem tipo={feedback.tipo} onFechar={() => setFeedback(null)}>
+                            {feedback.texto}{' '}
+                            {feedback.tipo === 'sucesso' && !feedback.interno && (
+                                <Link to="/carrinho">Ver sacola</Link>
+                            )}
+                        </Mensagem>
                     )}
 
-                    {atributos.length > 0 && (
-                        <div className="atributos">
-                            <h2 className="atributos__titulo">Atributos</h2>
-                            <dl className="atributos__lista">
-                                {atributos.map(([chave, valor]) => (
-                                    <div className="atributos__item" key={chave}>
-                                        <dt>{chave}</dt>
-                                        <dd>{String(valor)}</dd>
+                    <ul className="garantias">
+                        <li>
+                            <Icone nome="caminhao" tamanho={18} />
+                            Frete grátis em compras acima de {formatarReais(LIMITE_FRETE_GRATIS)}
+                        </li>
+                        <li>
+                            <Icone nome="folha" tamanho={18} />
+                            Comprar usado evita uma peça nova sendo produzida
+                        </li>
+                        {estoque === 1 && (
+                            <li>
+                                <Icone nome="etiqueta" tamanho={18} />
+                                Peça única: quando sai, não volta
+                            </li>
+                        )}
+                    </ul>
+
+                    {ficha.length > 0 && (
+                        <div className="ficha">
+                            <h2 className="ficha__titulo">Ficha da peça</h2>
+                            <dl className="ficha__lista">
+                                {ficha.map(([rotulo, valor, ajuda]) => (
+                                    <div className="ficha__item" key={rotulo}>
+                                        <dt>{rotulo}</dt>
+                                        <dd>
+                                            {rotulo === 'Cor' && corHex && (
+                                                <span
+                                                    className={`amostra-cor ${corHex === 'estampa' ? 'amostra-cor--estampa' : ''}`}
+                                                    style={corHex !== 'estampa' ? { background: corHex } : undefined}
+                                                    aria-hidden="true"
+                                                />
+                                            )}
+                                            {String(valor)}
+                                            {ajuda && <small>{ajuda}</small>}
+                                        </dd>
                                     </div>
                                 ))}
                             </dl>
                         </div>
                     )}
 
-                    <div className="detalhes__compra">
-                        <label className="seletor-quantidade">
-                            <span>Quantidade</span>
-                            <input
-                                type="number"
-                                min={1}
-                                max={estoque}
-                                value={esgotado ? 0 : quantidade}
-                                disabled={esgotado}
-                                onChange={(e) => ajustarQuantidade(e.target.value)}
-                            />
-                        </label>
-
-                        <Botao
-                            onClick={adicionar}
-                            carregando={adicionando}
-                            disabled={esgotado}
-                        >
-                            {esgotado ? 'Esgotado' : 'Adicionar ao carrinho'}
-                        </Botao>
-                    </div>
-
-                    {feedback && (
-                        <Mensagem tipo={feedback.tipo} onFechar={() => setFeedback(null)}>
-                            {feedback.texto}
-                        </Mensagem>
+                    {produto.descricao && (
+                        <div className="historia">
+                            <h2 className="ficha__titulo">A história da peça</h2>
+                            <p>{produto.descricao}</p>
+                        </div>
                     )}
 
-                    <div className="detalhes__gestao">
-                        <Link
-                            className="link-botao link-botao--secundario"
-                            to={`/produtos/${produto.id}/editar`}
-                        >
-                            Editar
-                        </Link>
-                        <Botao
-                            variante="perigo"
-                            onClick={excluir}
-                            carregando={excluindo}
-                        >
-                            Excluir
-                        </Botao>
+                    <div className="bastidores">
+                        <div>
+                            <p className="bastidores__titulo">Bastidores do acervo</p>
+                            <p className="bastidores__texto">
+                                Código <code>{produto.id}</code> · {estoque} em estoque
+                            </p>
+                        </div>
+                        <div className="bastidores__acoes">
+                            <Link
+                                className="link-botao link-botao--secundario link-botao--pequeno"
+                                to={`/produtos/${produto.id}/editar`}
+                            >
+                                <Icone nome="lapis" tamanho={16} /> Editar
+                            </Link>
+                            <Botao
+                                variante="perigo-suave"
+                                className="botao--pequeno"
+                                onClick={() => setConfirmandoExclusao(true)}
+                            >
+                                <Icone nome="lixeira" tamanho={16} /> Excluir
+                            </Botao>
+                        </div>
                     </div>
                 </div>
             </div>
+
+            <ConfirmarDialogo
+                aberto={confirmandoExclusao}
+                titulo="Excluir esta peça?"
+                rotuloConfirmar="Excluir peça"
+                carregando={excluindo}
+                onConfirmar={excluir}
+                onCancelar={() => setConfirmandoExclusao(false)}
+            >
+                <p>
+                    <strong>{produto.nome}</strong> sairá da vitrine e do acervo. Essa ação não
+                    pode ser desfeita.
+                </p>
+            </ConfirmarDialogo>
         </section>
     );
 }

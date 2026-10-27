@@ -19,6 +19,7 @@ import { formatarDataHora, StatusBadge } from '../components/ui/StatusPedido.jsx
 import Loading from '../components/ui/Loading.jsx';
 import Mensagem from '../components/ui/Mensagem.jsx';
 import Botao from '../components/ui/Botao.jsx';
+import Icone from '../components/ui/Icone.jsx';
 
 export default function Pedidos() {
     const [lista, setLista] = useState([]);
@@ -58,7 +59,7 @@ export default function Pedidos() {
                         Tentar novamente
                     </Botao>
                     <Link className="link-botao link-botao--secundario" to="/">
-                        Voltar ao catálogo
+                        Voltar à vitrine
                     </Link>
                 </div>
             </section>
@@ -68,57 +69,66 @@ export default function Pedidos() {
     if (lista.length === 0) {
         return (
             <section className="pedidos pedidos--vazio">
-                <div className="pagina-cabecalho">
-                    <h1>Pedidos</h1>
+                <div className="estado-vazio">
+                    <span className="estado-vazio__icone">
+                        <Icone nome="caixa" tamanho={40} />
+                    </span>
+                    <h1>Nenhum pedido ainda</h1>
+                    <p>Quando você garimpar sua primeira peça, o pedido aparece aqui.</p>
+                    <Link className="link-botao" to="/">
+                        Explorar a vitrine
+                    </Link>
                 </div>
-                <Mensagem tipo="info">
-                    Nenhum pedido ainda. <Link to="/">Explorar o catálogo</Link>.
-                </Mensagem>
             </section>
         );
     }
 
+    // Mais recentes primeiro.
+    const ordenados = [...lista].sort((a, b) => String(b.data).localeCompare(String(a.data)));
+    const pagos = lista.filter((p) => p.status === 'PAGO');
+    const totalPago = pagos.reduce((soma, p) => soma + (Number(p.total) || 0), 0);
+
     return (
         <section className="pedidos">
             <div className="pagina-cabecalho">
-                <h1>Pedidos</h1>
+                <div>
+                    <p className="sobretitulo">
+                        {pagos.length} {pagos.length === 1 ? 'pedido pago' : 'pedidos pagos'} ·{' '}
+                        {formatarReais(totalPago)}
+                    </p>
+                    <h1>Pedidos</h1>
+                </div>
                 <Link className="link-botao link-botao--secundario" to="/">
-                    Continuar comprando
+                    Continuar garimpando
                 </Link>
             </div>
 
             <ul className="pedidos__lista">
-                {lista.map((pedido) => (
+                {ordenados.map((pedido) => (
                     <li className="pedido-card" key={pedido.id}>
-                        <div className="pedido-card__cabecalho">
-                            <div className="pedido-card__id">
+                        <Link
+                            className="pedido-card__link"
+                            to={`/pedidos/${encodeURIComponent(pedido.id)}`}
+                        >
+                            <span className="pedido-card__icone" aria-hidden="true">
+                                <Icone nome="caixa" tamanho={22} />
+                            </span>
+                            <span className="pedido-card__id">
                                 <span className="pedido-card__rotulo">Pedido</span>
                                 <strong>{pedido.id}</strong>
-                            </div>
+                            </span>
+                            <span className="pedido-card__data">
+                                {formatarDataHora(pedido.data)}
+                            </span>
                             <StatusBadge status={pedido.status} />
-                        </div>
-
-                        <dl className="pedido-card__dados">
-                            <div className="pedido-card__linha">
-                                <dt>Data</dt>
-                                <dd>{formatarDataHora(pedido.data)}</dd>
-                            </div>
-                            <div className="pedido-card__linha">
-                                <dt>Total</dt>
-                                <dd className="pedido-card__total">
-                                    {formatarReais(pedido.total)}
-                                </dd>
-                            </div>
-                        </dl>
-
-                        <div className="pedido-card__acoes">
-                            <Link
-                                className="link-botao"
-                                to={`/pedidos/${encodeURIComponent(pedido.id)}`}
-                            >
-                                Ver detalhes
-                            </Link>
-                        </div>
+                            <strong className="pedido-card__total">
+                                {formatarReais(pedido.total)}
+                            </strong>
+                            <span className="pedido-card__seta" aria-hidden="true">
+                                <Icone nome="seguir" tamanho={18} />
+                            </span>
+                            <span className="sr-only">Ver detalhes</span>
+                        </Link>
                     </li>
                 ))}
             </ul>

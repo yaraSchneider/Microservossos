@@ -1,9 +1,10 @@
 // ---------------------------------------------------------------------------
-// Tela: Carrinho (rota "/carrinho")
+// Tela: Sacola (rota "/carrinho")
 //
-// Mostra os itens do carrinho (nome, imagem, preço unitário, quantidade e
-// subtotal de linha), o Subtotal, um campo de CEP com a ação "Calcular frete",
-// o valor do Frete, o Total e a ação "Finalizar compra". Permite remover itens
+// Mostra as peças da sacola (foto, marca, tamanho, preço, quantidade e
+// subtotal de linha), o Subtotal, uma barra de progresso até o frete grátis,
+// um campo de CEP com a ação "Calcular frete", o valor do Frete, o Total e a
+// ação "Finalizar compra". Permite remover itens
 // e alterar quantidades, sempre re-buscando o carrinho após cada alteração para
 // refletir os valores recalculados pelo backend (fonte da verdade).
 //
@@ -21,6 +22,10 @@ import Loading from '../components/ui/Loading.jsx';
 import Mensagem from '../components/ui/Mensagem.jsx';
 import Botao from '../components/ui/Botao.jsx';
 import ImagemProduto from '../components/ui/ImagemProduto.jsx';
+import SeloEstado from '../components/ui/SeloEstado.jsx';
+import Icone from '../components/ui/Icone.jsx';
+import { avisarSacolaAtualizada } from '../utils/sacolaEventos.js';
+import { LIMITE_FRETE_GRATIS, lerPeca } from '../utils/peca.js';
 
 export default function Carrinho() {
     const navegar = useNavigate();
@@ -98,15 +103,15 @@ export default function Carrinho() {
     }, [carregarCarrinho]);
 
     if (carregando) {
-        return <Loading texto="Carregando carrinho..." />;
+        return <Loading texto="Abrindo a sacola..." />;
     }
 
     if (erro) {
         return (
-            <div>
+            <div className="pagina-estreita">
                 <Mensagem tipo="erro">{erro}</Mensagem>
                 <p>
-                    <Link to="/">← Voltar ao catálogo</Link>
+                    <Link to="/">← Voltar à vitrine</Link>
                 </p>
             </div>
         );
@@ -118,13 +123,16 @@ export default function Carrinho() {
     if (vazio) {
         return (
             <section className="carrinho carrinho--vazio">
-                <div className="pagina-cabecalho">
-                    <h1>Carrinho</h1>
+                <div className="estado-vazio">
+                    <span className="estado-vazio__icone">
+                        <Icone nome="sacola" tamanho={40} />
+                    </span>
+                    <h1>Sua sacola está vazia</h1>
+                    <p>Tem muita peça boa esperando por você na arara.</p>
+                    <Link className="link-botao" to="/">
+                        Explorar a vitrine
+                    </Link>
                 </div>
-                <Mensagem tipo="info">
-                    Seu carrinho está vazio.{' '}
-                    <Link to="/">Explorar o catálogo</Link>.
-                </Mensagem>
             </section>
         );
     }
@@ -133,6 +141,11 @@ export default function Carrinho() {
     const frete = Number(carrinhoDados.frete) || 0;
     const total = Number(carrinhoDados.total) || 0;
     const freteCalculado = Boolean(carrinhoDados.cep);
+    const quantidadePecas = itens.reduce((soma, item) => soma + (Number(item.quantidade) || 0), 0);
+
+    // Progresso até o frete grátis (regra: subtotal ACIMA do limite).
+    const faltaFreteGratis = Math.max(0, LIMITE_FRETE_GRATIS + 1 - subtotal);
+    const progressoFrete = Math.min(100, Math.round((subtotal / LIMITE_FRETE_GRATIS) * 100));
 
     async function alterarQuantidade(produtoId, novaQuantidade) {
         const quantidade = Math.max(1, Math.floor(Number(novaQuantidade) || 0));
@@ -140,6 +153,7 @@ export default function Carrinho() {
         try {
             await apiCarrinho.alterarItem(carrinhoId, produtoId, { quantidade });
             await carregarCarrinho({ silencioso: true });
+            avisarSacolaAtualizada();
         } catch (e) {
             setFeedback({
                 tipo: 'erro',
@@ -155,14 +169,15 @@ export default function Carrinho() {
         try {
             await apiCarrinho.removerItem(carrinhoId, produtoId);
             await carregarCarrinho({ silencioso: true });
+            avisarSacolaAtualizada();
             setFeedback({
                 tipo: 'sucesso',
-                texto: `"${nome}" removido do carrinho.`,
+                texto: `"${nome}" voltou para a arara.`,
             });
         } catch (e) {
             setFeedback({
                 tipo: 'erro',
-                texto: e.message || 'Não foi possível remover o item.',
+                texto: e.message || 'Não foi possível remover a peça.',
             });
         }
     }
@@ -193,9 +208,14 @@ export default function Carrinho() {
     return (
         <section className="carrinho">
             <div className="pagina-cabecalho">
-                <h1>Carrinho</h1>
+                <div>
+                    <p className="sobretitulo">
+                        {quantidadePecas} {quantidadePecas === 1 ? 'peça separada' : 'peças separadas'}
+                    </p>
+                    <h1>Sua sacola</h1>
+                </div>
                 <Link className="link-botao link-botao--secundario" to="/">
-                    Continuar comprando
+                    Continuar garimpando
                 </Link>
             </div>
 
@@ -221,6 +241,31 @@ export default function Carrinho() {
                 <aside className="carrinho__resumo">
                     <h2 className="carrinho__resumo-titulo">Resumo</h2>
 
+                    <div className="progresso-frete">
+                        <p>
+                            {faltaFreteGratis > 0 ? (
+                                <>
+                                    Faltam <strong>{formatarReais(faltaFreteGratis)}</strong> para o
+                                    frete grátis
+                                </>
+                            ) : (
+                                <>
+                                    <Icone nome="check" tamanho={16} /> Você ganhou <strong>frete grátis</strong>!
+                                </>
+                            )}
+                        </p>
+                        <div
+                            className="progresso-frete__barra"
+                            role="progressbar"
+                            aria-label="Progresso até o frete grátis"
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                            aria-valuenow={progressoFrete}
+                        >
+                            <span style={{ width: `${progressoFrete}%` }} />
+                        </div>
+                    </div>
+
                     <form className="carrinho__frete" onSubmit={calcularFrete}>
                         <label className="form__label" htmlFor="cep">
                             CEP de entrega
@@ -240,7 +285,7 @@ export default function Carrinho() {
                                 variante="secundario"
                                 carregando={calculandoFrete}
                             >
-                                Calcular frete
+                                Calcular
                             </Botao>
                         </div>
                     </form>
@@ -257,7 +302,7 @@ export default function Carrinho() {
                                     ? frete === 0
                                         ? 'Grátis'
                                         : formatarReais(frete)
-                                    : '—'}
+                                    : 'Informe o CEP'}
                             </dd>
                         </div>
                         <div className="carrinho__totais-linha carrinho__totais-linha--total">
@@ -266,8 +311,8 @@ export default function Carrinho() {
                         </div>
                     </dl>
 
-                    <Botao onClick={finalizar} disabled={itens.length === 0}>
-                        Finalizar compra
+                    <Botao className="botao--largo" onClick={finalizar} disabled={itens.length === 0}>
+                        Finalizar compra <Icone nome="seguir" tamanho={18} />
                     </Botao>
                 </aside>
             </div>
@@ -276,17 +321,21 @@ export default function Carrinho() {
 }
 
 // ---------------------------------------------------------------------------
-// Linha de item do carrinho, com controle de quantidade e remoção. Mantém
-// estados de carregamento próprios por operação para feedback localizado.
+// Linha de peça da sacola. Peças únicas mostram "Peça única" no lugar do
+// seletor de quantidade; peças com mais de uma unidade permitem ajustar até o
+// estoque disponível. Mantém estados de carregamento próprios por operação.
 // ---------------------------------------------------------------------------
 function ItemCarrinho({ item, produto, aoAlterar, aoRemover }) {
     const [alterando, setAlterando] = useState(false);
     const [removendo, setRemovendo] = useState(false);
 
-    const nome = produto?.nome || `Produto ${item.produtoId}`;
+    const nome = produto?.nome || `Peça ${item.produtoId}`;
+    const peca = lerPeca(produto);
     const precoUnitario = Number(item.precoUnitario) || 0;
     const quantidade = Number(item.quantidade) || 0;
     const subtotalLinha = precoUnitario * quantidade;
+    const estoque = Number(produto?.estoque) || 0;
+    const ajustavel = estoque > 1 || quantidade > 1;
     const ocupado = alterando || removendo;
 
     async function definirQuantidade(valor) {
@@ -314,10 +363,16 @@ function ItemCarrinho({ item, produto, aoAlterar, aoRemover }) {
     return (
         <li className="item-carrinho">
             <div className="item-carrinho__midia">
-                <ImagemProduto src={produto?.imagemUrl} alt={nome} />
+                <ImagemProduto
+                    src={produto?.imagemUrl}
+                    alt={nome}
+                    categoria={produto?.categoria}
+                    cor={peca.cor}
+                />
             </div>
 
             <div className="item-carrinho__info">
+                {peca.marca && <p className="item-carrinho__marca">{peca.marca}</p>}
                 <h3 className="item-carrinho__nome">
                     {produto ? (
                         <Link to={`/produto/${item.produtoId}`}>{nome}</Link>
@@ -325,39 +380,46 @@ function ItemCarrinho({ item, produto, aoAlterar, aoRemover }) {
                         nome
                     )}
                 </h3>
-                <p className="item-carrinho__preco">
-                    {formatarReais(precoUnitario)} / un.
+                <p className="item-carrinho__meta">
+                    {peca.tamanho && <span className="chip-tamanho">{peca.tamanho}</span>}
+                    <SeloEstado estado={peca.estado} />
                 </p>
+
+                <div className="item-carrinho__quantidade">
+                    {ajustavel ? (
+                        <label className="seletor-quantidade">
+                            <span>Qtd.</span>
+                            <input
+                                type="number"
+                                min={1}
+                                max={estoque || undefined}
+                                value={quantidade}
+                                disabled={ocupado}
+                                onChange={(e) => definirQuantidade(e.target.value)}
+                            />
+                        </label>
+                    ) : (
+                        <span className="item-carrinho__unica">Peça única</span>
+                    )}
+                    {alterando && <Loading inline />}
+                </div>
             </div>
 
-            <div className="item-carrinho__quantidade">
-                <label className="seletor-quantidade">
-                    <span>Quantidade</span>
-                    <input
-                        type="number"
-                        min={1}
-                        value={quantidade}
-                        disabled={ocupado}
-                        onChange={(e) => definirQuantidade(e.target.value)}
-                    />
-                </label>
-                {alterando && <Loading inline />}
-            </div>
-
-            <div className="item-carrinho__subtotal">
-                <span className="item-carrinho__subtotal-rotulo">Subtotal</span>
-                <strong>{formatarReais(subtotalLinha)}</strong>
-            </div>
-
-            <div className="item-carrinho__acoes">
-                <Botao
-                    variante="perigo"
+            <div className="item-carrinho__lateral">
+                <strong className="item-carrinho__subtotal">{formatarReais(subtotalLinha)}</strong>
+                {quantidade > 1 && (
+                    <span className="item-carrinho__unitario">{formatarReais(precoUnitario)} cada</span>
+                )}
+                <button
+                    type="button"
+                    className="link-acao link-acao--perigo"
                     onClick={remover}
-                    carregando={removendo}
-                    disabled={alterando}
+                    disabled={ocupado}
+                    aria-busy={removendo}
                 >
+                    {removendo ? <Loading inline /> : <Icone nome="lixeira" tamanho={16} />}
                     Remover
-                </Botao>
+                </button>
             </div>
         </li>
     );

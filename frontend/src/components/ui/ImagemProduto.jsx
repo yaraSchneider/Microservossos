@@ -1,31 +1,37 @@
 // ---------------------------------------------------------------------------
 // ImagemProduto
 //
-// Exibe a imagem do produto (`imagemUrl`). Quando a URL está ausente ou a
-// imagem falha ao carregar, mostra um placeholder amigável.
+// Exibe a foto da peça (`imagemUrl`). Quando a URL está ausente ou a imagem
+// falha ao carregar, mostra a ilustração da peça pintada na cor cadastrada.
 // ---------------------------------------------------------------------------
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import IlustracaoPeca from './IlustracaoPeca.jsx';
 
 /**
  * @param {object} props
  * @param {string} [props.src] URL da imagem (imagemUrl).
- * @param {string} props.alt Texto alternativo (nome do produto).
+ * @param {string} props.alt Texto alternativo (nome da peça).
+ * @param {string} [props.categoria] Categoria (define a silhueta).
+ * @param {string} [props.cor] Cor da peça (pinta a silhueta).
  * @param {string} [props.className] Classe adicional.
  */
-export default function ImagemProduto({ src, alt, className = '' }) {
+export default function ImagemProduto({ src, alt, categoria, cor, className = '' }) {
     const [falhou, setFalhou] = useState(false);
-    const semImagem = !src || falhou;
 
-    if (semImagem) {
+    // Uma nova URL (ex.: pré-visualização do formulário) merece nova tentativa.
+    useEffect(() => {
+        setFalhou(false);
+    }, [src]);
+
+    if (!src || falhou) {
         return (
             <div
-                className={`imagem-produto imagem-produto--placeholder ${className}`.trim()}
+                className={`imagem-produto imagem-produto--ilustracao ${className}`.trim()}
                 role="img"
-                aria-label={alt ? `Sem imagem: ${alt}` : 'Sem imagem'}
+                aria-label={alt ? `Ilustração: ${alt}` : 'Peça sem foto'}
             >
-                <span aria-hidden="true">🛍️</span>
-                <span className="imagem-produto__legenda">Sem imagem</span>
+                <IlustracaoPeca categoria={categoria} cor={cor} />
             </div>
         );
     }

@@ -36,6 +36,11 @@ import { formatarReais } from '../utils/formato.js';
 import Loading from '../components/ui/Loading.jsx';
 import Mensagem from '../components/ui/Mensagem.jsx';
 import Botao from '../components/ui/Botao.jsx';
+import Icone from '../components/ui/Icone.jsx';
+import ImagemProduto from '../components/ui/ImagemProduto.jsx';
+import IlustracaoPeca from '../components/ui/IlustracaoPeca.jsx';
+import { avisarSacolaAtualizada } from '../utils/sacolaEventos.js';
+import { lerPeca } from '../utils/peca.js';
 
 export default function Checkout() {
     const [carrinhoId] = useState(() => getCarrinhoId());
@@ -188,6 +193,7 @@ export default function Checkout() {
             if (aprovado) {
                 // 3. Carrinho limpo no backend -> inicia um novo carrinho local.
                 resetCarrinhoId();
+                avisarSacolaAtualizada();
             } else {
                 // 4. Recusa: estoque devolvido; permite nova tentativa com um
                 //    pedido novo (o backend libera a finalização após recusa).
@@ -211,10 +217,10 @@ export default function Checkout() {
 
     if (erro) {
         return (
-            <div>
+            <div className="pagina-estreita">
                 <Mensagem tipo="erro">{erro}</Mensagem>
                 <p>
-                    <Link to="/carrinho">← Voltar ao carrinho</Link>
+                    <Link to="/carrinho">← Voltar à sacola</Link>
                 </p>
             </div>
         );
@@ -224,21 +230,31 @@ export default function Checkout() {
     if (resultado && resultado.aprovado) {
         const pedido = resultado.pedido || {};
         return (
-            <section className="card checkout__resultado">
-                <h1>Pagamento aprovado!</h1>
+            <section className="checkout__resultado">
+                <div className="checkout__resultado-ilustracao" aria-hidden="true">
+                    <IlustracaoPeca categoria="Acessórios" cor="terracota" />
+                    <span className="checkout__resultado-check">
+                        <Icone nome="check" tamanho={28} />
+                    </span>
+                </div>
+                <p className="sobretitulo">Pagamento aprovado</p>
+                <h1>Suas peças vão ganhar uma nova história!</h1>
                 <Mensagem tipo="sucesso">
                     Pagamento aprovado! Pedido {pedido.id} confirmado.
                 </Mensagem>
-                <p>
-                    Obrigado pela compra. Você pode acompanhar o andamento na tela
-                    de pedidos.
+                <p className="checkout__resultado-texto">
+                    Obrigado por escolher a moda circular. Vamos embalar tudo com carinho, e
+                    você acompanha o andamento na tela de pedidos.
                 </p>
                 <div className="checkout__resultado-acoes">
-                    <Link className="link-botao" to="/pedidos">
-                        Ver pedidos
+                    <Link
+                        className="link-botao"
+                        to={pedido.id ? `/pedidos/${encodeURIComponent(pedido.id)}` : '/pedidos'}
+                    >
+                        Ver meu pedido
                     </Link>
                     <Link className="link-botao link-botao--secundario" to="/">
-                        Voltar ao catálogo
+                        Voltar à vitrine
                     </Link>
                 </div>
             </section>
@@ -252,14 +268,23 @@ export default function Checkout() {
     if (vazio) {
         return (
             <section className="checkout checkout--vazio">
-                <div className="pagina-cabecalho">
-                    <h1>Checkout</h1>
+                <div className="estado-vazio">
+                    <span className="estado-vazio__icone">
+                        <Icone nome="sacola" tamanho={40} />
+                    </span>
+                    <h1>Nada para finalizar</h1>
+                    <p>
+                        Sua sacola está vazia, não há pedido para finalizar.
+                    </p>
+                    <div className="estado-vazio__acoes">
+                        <Link className="link-botao" to="/">
+                            Explorar a vitrine
+                        </Link>
+                        <Link className="link-botao link-botao--secundario" to="/carrinho">
+                            Ver a sacola
+                        </Link>
+                    </div>
                 </div>
-                <Mensagem tipo="info">
-                    Seu carrinho está vazio, não há pedido para finalizar.{' '}
-                    <Link to="/">Explorar o catálogo</Link> ou{' '}
-                    <Link to="/carrinho">ver o carrinho</Link>.
-                </Mensagem>
             </section>
         );
     }
@@ -273,9 +298,12 @@ export default function Checkout() {
     return (
         <section className="checkout">
             <div className="pagina-cabecalho">
-                <h1>Checkout</h1>
+                <div>
+                    <p className="sobretitulo">Quase lá</p>
+                    <h1>Finalizar compra</h1>
+                </div>
                 <Link className="link-botao link-botao--secundario" to="/carrinho">
-                    Voltar ao carrinho
+                    <Icone nome="voltar" tamanho={18} /> Voltar à sacola
                 </Link>
             </div>
 
@@ -286,91 +314,98 @@ export default function Checkout() {
                     onSubmit={(e) => e.preventDefault()}
                     noValidate
                 >
-                    <h2 className="checkout__secao-titulo">Dados de entrega</h2>
+                    <fieldset className="form__secao">
+                        <legend className="form__secao-titulo">
+                            <span className="form__secao-numero">1</span> Dados de entrega
+                        </legend>
 
-                    <div className="form__grupo">
-                        <label className="form__label" htmlFor="nome">
-                            Nome <span aria-hidden="true">*</span>
-                        </label>
-                        <input
-                            id="nome"
-                            className="form__controle"
-                            type="text"
-                            value={comprador.nome}
-                            onChange={(e) => atualizarCampo('nome', e.target.value)}
-                            disabled={ocupado}
-                            required
-                        />
-                    </div>
-
-                    <div className="form__linha">
                         <div className="form__grupo">
-                            <label className="form__label" htmlFor="cep">
-                                CEP <span aria-hidden="true">*</span>
+                            <label className="form__label" htmlFor="nome">
+                                Nome <span aria-hidden="true">*</span>
                             </label>
                             <input
-                                id="cep"
+                                id="nome"
                                 className="form__controle"
                                 type="text"
-                                inputMode="numeric"
-                                placeholder="00000-000"
-                                value={comprador.cep}
-                                onChange={(e) => atualizarCampo('cep', e.target.value)}
+                                autoComplete="name"
+                                value={comprador.nome}
+                                onChange={(e) => atualizarCampo('nome', e.target.value)}
                                 disabled={ocupado}
                                 required
                             />
                         </div>
+
+                        <div className="form__linha">
+                            <div className="form__grupo">
+                                <label className="form__label" htmlFor="cep">
+                                    CEP <span aria-hidden="true">*</span>
+                                </label>
+                                <input
+                                    id="cep"
+                                    className="form__controle"
+                                    type="text"
+                                    inputMode="numeric"
+                                    autoComplete="postal-code"
+                                    placeholder="00000-000"
+                                    value={comprador.cep}
+                                    onChange={(e) => atualizarCampo('cep', e.target.value)}
+                                    disabled={ocupado}
+                                    required
+                                />
+                            </div>
+                            <div className="form__grupo">
+                                <label className="form__label" htmlFor="numero">
+                                    Número <span aria-hidden="true">*</span>
+                                </label>
+                                <input
+                                    id="numero"
+                                    className="form__controle"
+                                    type="text"
+                                    value={comprador.numero}
+                                    onChange={(e) =>
+                                        atualizarCampo('numero', e.target.value)
+                                    }
+                                    disabled={ocupado}
+                                    required
+                                />
+                            </div>
+                        </div>
+
                         <div className="form__grupo">
-                            <label className="form__label" htmlFor="numero">
-                                Número <span aria-hidden="true">*</span>
+                            <label className="form__label" htmlFor="endereco">
+                                Endereço <span aria-hidden="true">*</span>
                             </label>
                             <input
-                                id="numero"
+                                id="endereco"
                                 className="form__controle"
                                 type="text"
-                                value={comprador.numero}
+                                autoComplete="street-address"
+                                value={comprador.endereco}
                                 onChange={(e) =>
-                                    atualizarCampo('numero', e.target.value)
+                                    atualizarCampo('endereco', e.target.value)
                                 }
                                 disabled={ocupado}
                                 required
                             />
                         </div>
-                    </div>
 
-                    <div className="form__grupo">
-                        <label className="form__label" htmlFor="endereco">
-                            Endereço <span aria-hidden="true">*</span>
-                        </label>
-                        <input
-                            id="endereco"
-                            className="form__controle"
-                            type="text"
-                            value={comprador.endereco}
-                            onChange={(e) =>
-                                atualizarCampo('endereco', e.target.value)
-                            }
-                            disabled={ocupado}
-                            required
-                        />
-                    </div>
-
-                    <div className="form__grupo">
-                        <label className="form__label" htmlFor="complemento">
-                            Complemento
-                        </label>
-                        <input
-                            id="complemento"
-                            className="form__controle"
-                            type="text"
-                            placeholder="Opcional"
-                            value={comprador.complemento}
-                            onChange={(e) =>
-                                atualizarCampo('complemento', e.target.value)
-                            }
-                            disabled={ocupado}
-                        />
-                    </div>
+                        <div className="form__grupo">
+                            <label className="form__label" htmlFor="complemento">
+                                Complemento
+                            </label>
+                            <input
+                                id="complemento"
+                                className="form__controle"
+                                type="text"
+                                placeholder="Opcional"
+                                value={comprador.complemento}
+                                onChange={(e) =>
+                                    atualizarCampo('complemento', e.target.value)
+                                }
+                                disabled={ocupado}
+                            />
+                        </div>
+                    </fieldset>
 
                     {erroValidacao && (
                         <Mensagem
@@ -389,35 +424,42 @@ export default function Checkout() {
 
                     {resultado && !resultado.aprovado && (
                         <Mensagem tipo="erro">
-                            Pagamento recusado. O estoque reservado foi devolvido.
-                            Revise os dados e tente novamente.
+                            Pagamento recusado. As peças voltaram para a arara (estoque
+                            devolvido). Revise os dados e tente novamente.
                         </Mensagem>
                     )}
 
-                    <h2 className="checkout__secao-titulo">Pagamento simulado</h2>
-                    <p className="form__ajuda">
-                        Escolha o resultado do pagamento para concluir a compra.
-                    </p>
-                    <div className="checkout__pagamento-acoes">
-                        <Botao
-                            type="button"
-                            variante="primario"
-                            onClick={() => processarPagamento(true)}
-                            carregando={processando === 'aprovado'}
-                            disabled={ocupado}
-                        >
-                            Simular pagamento aprovado
-                        </Botao>
-                        <Botao
-                            type="button"
-                            variante="perigo"
-                            onClick={() => processarPagamento(false)}
-                            carregando={processando === 'recusado'}
-                            disabled={ocupado}
-                        >
-                            Simular pagamento recusado
-                        </Botao>
-                    </div>
+                    <fieldset className="form__secao">
+                        <legend className="form__secao-titulo">
+                            <span className="form__secao-numero">2</span> Pagamento simulado
+                        </legend>
+                        <p className="form__ajuda">
+                            Este é um ambiente de demonstração: escolha o resultado do pagamento
+                            para concluir a compra.
+                        </p>
+                        <div className="checkout__pagamento-acoes">
+                            <Botao
+                                type="button"
+                                variante="primario"
+                                onClick={() => processarPagamento(true)}
+                                carregando={processando === 'aprovado'}
+                                disabled={ocupado}
+                            >
+                                {processando !== 'aprovado' && <Icone nome="check" tamanho={18} />}
+                                Simular pagamento aprovado
+                            </Botao>
+                            <Botao
+                                type="button"
+                                variante="perigo-suave"
+                                onClick={() => processarPagamento(false)}
+                                carregando={processando === 'recusado'}
+                                disabled={ocupado}
+                            >
+                                {processando !== 'recusado' && <Icone nome="fechar" tamanho={18} />}
+                                Simular pagamento recusado
+                            </Botao>
+                        </div>
+                    </fieldset>
                 </form>
 
                 {/* Resumo final do pedido */}
@@ -427,8 +469,9 @@ export default function Checkout() {
                     <ul className="checkout__itens">
                         {itens.map((item) => {
                             const produto = produtosMap[item.produtoId];
+                            const peca = lerPeca(produto);
                             const nome =
-                                produto?.nome || `Produto ${item.produtoId}`;
+                                produto?.nome || `Peça ${item.produtoId}`;
                             const precoUnitario = Number(item.precoUnitario) || 0;
                             const quantidade = Number(item.quantidade) || 0;
                             const subtotalLinha = precoUnitario * quantidade;
@@ -437,12 +480,23 @@ export default function Checkout() {
                                     className="checkout__item"
                                     key={item.produtoId}
                                 >
-                                    <span className="checkout__item-nome">
-                                        {nome}
+                                    <span className="checkout__item-midia">
+                                        <ImagemProduto
+                                            src={produto?.imagemUrl}
+                                            alt={nome}
+                                            categoria={produto?.categoria}
+                                            cor={peca.cor}
+                                        />
+                                        {quantidade > 1 && (
+                                            <span className="checkout__item-badge">{quantidade}</span>
+                                        )}
                                     </span>
-                                    <span className="checkout__item-qtd">
-                                        {quantidade} ×{' '}
-                                        {formatarReais(precoUnitario)}
+                                    <span className="checkout__item-info">
+                                        <span className="checkout__item-nome">{nome}</span>
+                                        <span className="checkout__item-qtd">
+                                            {peca.tamanho ? `Tam. ${peca.tamanho} · ` : ''}
+                                            {quantidade} × {formatarReais(precoUnitario)}
+                                        </span>
                                     </span>
                                     <strong className="checkout__item-total">
                                         {formatarReais(subtotalLinha)}
