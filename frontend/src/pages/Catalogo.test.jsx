@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Teste de tela: Catálogo — estados de carregamento, sucesso e erro.
+// Teste de tela: Vitrine (Catálogo) — estados de carregamento, sucesso e erro.
 //
 // Cobre o fluxo de uma operação dependente de backend: exibe loading,
 // depois a lista de produtos com preços formatados em reais (sucesso) ou
@@ -33,7 +33,7 @@ function renderizar() {
     );
 }
 
-describe('Tela Catálogo', () => {
+describe('Tela Vitrine (Catálogo)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
@@ -42,20 +42,20 @@ describe('Tela Catálogo', () => {
         // Promessa pendente -> permanece em loading.
         apiProdutos.listar.mockReturnValue(new Promise(() => {}));
         renderizar();
-        expect(screen.getByText(/carregando produtos/i)).toBeInTheDocument();
+        expect(screen.getByText(/carregando a vitrine/i)).toBeInTheDocument();
     });
 
     it('exibe os produtos com preços em reais no sucesso', async () => {
         apiProdutos.listar.mockResolvedValue([
-            { id: 'p-1', nome: 'Caneca', preco: 350000, categoria: 'Cozinha', estoque: 5 },
-            { id: 'p-2', nome: 'Caderno', preco: 1, categoria: 'Papelaria', estoque: 0 },
+            { id: 'p-1', nome: 'Jaqueta jeans', preco: 350000, categoria: 'Jaquetas & Casacos', estoque: 5 },
+            { id: 'p-2', nome: 'Vestido midi', preco: 1, categoria: 'Vestidos', estoque: 1 },
         ]);
 
         renderizar();
-        await waitForElementToBeRemoved(() => screen.queryByText(/carregando produtos/i));
+        await waitForElementToBeRemoved(() => screen.queryByText(/carregando a vitrine/i));
 
-        expect(screen.getByText('Caneca')).toBeInTheDocument();
-        expect(screen.getByText('Caderno')).toBeInTheDocument();
+        expect(screen.getByText('Jaqueta jeans')).toBeInTheDocument();
+        expect(screen.getByText('Vestido midi')).toBeInTheDocument();
         // Preços formatados em reais (normaliza o espaço não separável).
         const normalizar = (t) => t.replace(/\u00a0/g, ' ');
         expect(
@@ -72,18 +72,31 @@ describe('Tela Catálogo', () => {
         );
 
         renderizar();
-        await waitForElementToBeRemoved(() => screen.queryByText(/carregando produtos/i));
+        await waitForElementToBeRemoved(() => screen.queryByText(/carregando a vitrine/i));
 
         const alerta = screen.getByRole('alert');
         expect(alerta).toHaveTextContent(/não foi possível conectar ao servidor/i);
+    });
+
+    it('oculta peças vendidas por padrão', async () => {
+        apiProdutos.listar.mockResolvedValue([
+            { id: 'p-1', nome: 'Saia plissada', preco: 5000, categoria: 'Saias', estoque: 1 },
+            { id: 'p-2', nome: 'Blazer vendido', preco: 9000, categoria: 'Jaquetas & Casacos', estoque: 0 },
+        ]);
+
+        renderizar();
+        await waitForElementToBeRemoved(() => screen.queryByText(/carregando a vitrine/i));
+
+        expect(screen.getByText('Saia plissada')).toBeInTheDocument();
+        expect(screen.queryByText('Blazer vendido')).not.toBeInTheDocument();
     });
 
     it('exibe estado vazio quando não há produtos', async () => {
         apiProdutos.listar.mockResolvedValue([]);
 
         renderizar();
-        await waitForElementToBeRemoved(() => screen.queryByText(/carregando produtos/i));
+        await waitForElementToBeRemoved(() => screen.queryByText(/carregando a vitrine/i));
 
-        expect(screen.getByText(/nenhum produto cadastrado ainda/i)).toBeInTheDocument();
+        expect(screen.getByText(/nenhuma peça cadastrada ainda/i)).toBeInTheDocument();
     });
 });
