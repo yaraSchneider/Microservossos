@@ -1,6 +1,6 @@
-# E-commerce com Arquitetura de Microsserviços
+# Garimpo · brechó online em microsserviços
 
-Aplicação de e-commerce simples, construída para demonstrar, de forma didática, a **comunicação entre contêineres Docker independentes** por meio de APIs REST. O sistema é composto por **quatro contêineres** que conversam exclusivamente via HTTP/JSON na rede interna do Docker:
+Aplicação de e-commerce de um **brechó de roupas** (Garimpo), construída para demonstrar, de forma didática, a **comunicação entre contêineres Docker independentes** por meio de APIs REST. O sistema é composto por **quatro contêineres** que conversam exclusivamente via HTTP/JSON na rede interna do Docker:
 
 | Contêiner | Tecnologia | Porta | Responsabilidade |
 |---|---|---|---|
@@ -122,6 +122,27 @@ Para parar sem remover (preservando os contêineres):
 ```bash
 docker compose stop
 ```
+
+---
+
+## Identidade do brechó (Frontend)
+
+O Frontend apresenta a loja como o **Garimpo**, um brechó de roupas de segunda mão:
+
+- **Visual:** papel creme, terracota, oliva e mostarda; títulos em Fraunces, texto em DM Sans e preços "escritos à mão" (Caveat) numa etiqueta de brechó. Fontes carregadas do Google Fonts.
+- **Telas:** Vitrine (busca, filtros por categoria e tamanho, ordenação), Detalhes da peça (ficha técnica e história), **Acervo** (`/acervo`, gestão/CRUD com números, tabela e exclusão com confirmação), Cadastro/Edição com pré-visualização do card, Sacola (progresso até o frete grátis), Checkout e Pedidos (linha do tempo do status).
+- **Peças de roupa sem mudar o backend:** os dados de vestuário ficam em chaves conhecidas do mapa `atributos` do produto: `tamanho`, `marca`, `estado` (`nova-com-etiqueta`, `seminova`, `muito-bom`, `bom`, `vintage`), `cor`, `tecido`, `medidas` e `precoOriginal` (centavos, como string). Outras chaves continuam como atributos livres. Ver `frontend/src/utils/peca.js`.
+- **Sem foto?** A peça aparece como uma ilustração SVG da categoria, pintada na cor cadastrada.
+
+### Peças de exemplo
+
+Com os contêineres rodando, cadastre um acervo de demonstração (12 peças) pela API:
+
+```bash
+node scripts/seed-brecho.mjs
+```
+
+O script pula peças que já existem pelo nome, então pode ser executado mais de uma vez.
 
 ---
 
