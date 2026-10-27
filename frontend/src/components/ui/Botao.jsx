@@ -12,7 +12,7 @@ import Loading from './Loading.jsx';
  * @param {object} props
  * @param {boolean} [props.carregando] Exibe spinner e desabilita o botão.
  * @param {boolean} [props.disabled] Desabilita o botão.
- * @param {'primario'|'secundario'|'perigo'} [props.variante] Estilo visual.
+ * @param {'primario'|'secundario'|'perigo'|'perigo-suave'} [props.variante] Estilo visual.
  * @param {React.ReactNode} props.children Rótulo do botão.
  */
 export default function Botao({

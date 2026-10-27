@@ -20,6 +20,25 @@ import { formatarDataHora, StatusBadge } from '../components/ui/StatusPedido.jsx
 import Loading from '../components/ui/Loading.jsx';
 import Mensagem from '../components/ui/Mensagem.jsx';
 import Botao from '../components/ui/Botao.jsx';
+import Icone from '../components/ui/Icone.jsx';
+import { CORES, descreverAtributo } from '../utils/peca.js';
+
+// Etapas exibidas na linha do tempo do pedido, conforme o status.
+function etapasDoPedido(status) {
+    const pagamento = {
+        PAGO: { rotulo: 'Pagamento aprovado', estado: 'feito' },
+        PAGAMENTO_RECUSADO: { rotulo: 'Pagamento recusado', estado: 'falhou' },
+        CANCELADO: { rotulo: 'Pedido cancelado', estado: 'falhou' },
+    }[status] || { rotulo: 'Aguardando pagamento', estado: 'atual' };
+    return [
+        { rotulo: 'Pedido feito', estado: 'feito' },
+        pagamento,
+        {
+            rotulo: 'Separando as peças',
+            estado: status === 'PAGO' ? 'atual' : 'futuro',
+        },
+    ];
+}
 
 export default function DetalhesPedido() {
     const { id } = useParams();
@@ -91,28 +110,43 @@ export default function DetalhesPedido() {
     return (
         <section className="pedido-detalhe">
             <div className="pagina-cabecalho">
-                <h1>Pedido {pedido.id}</h1>
+                <div>
+                    <p className="sobretitulo">{formatarDataHora(pedido.data)}</p>
+                    <h1>Pedido {pedido.id}</h1>
+                </div>
                 <Link className="link-botao link-botao--secundario" to="/pedidos">
-                    Voltar aos pedidos
+                    <Icone nome="voltar" tamanho={18} /> Voltar aos pedidos
                 </Link>
             </div>
 
             <div className="pedido-detalhe__resumo-topo">
                 <StatusBadge status={pedido.status} />
-                <span className="pedido-detalhe__data">
-                    {formatarDataHora(pedido.data)}
-                </span>
+                <ol className="linha-tempo">
+                    {etapasDoPedido(pedido.status).map((etapa) => (
+                        <li key={etapa.rotulo} className={`linha-tempo__etapa linha-tempo__etapa--${etapa.estado}`}>
+                            <span className="linha-tempo__marcador" aria-hidden="true">
+                                {etapa.estado === 'feito' && <Icone nome="check" tamanho={14} />}
+                                {etapa.estado === 'falhou' && <Icone nome="fechar" tamanho={14} />}
+                            </span>
+                            {etapa.rotulo}
+                        </li>
+                    ))}
+                </ol>
             </div>
 
             <div className="pedido-detalhe__grade">
                 {/* Itens (snapshot imutável) */}
-                <div className="pedido-detalhe__itens">
-                    <h2 className="pedido-detalhe__secao-titulo">Itens</h2>
+                <div className="pedido-detalhe__itens card">
+                    <h2 className="pedido-detalhe__secao-titulo">
+                        {itens.length} {itens.length === 1 ? 'peça' : 'peças'}
+                    </h2>
                     <ul className="pedido-itens">
                         {itens.map((item) => {
                             const precoUnitario = Number(item.precoUnitario) || 0;
                             const quantidade = Number(item.quantidade) || 0;
                             const subtotalLinha = precoUnitario * quantidade;
+                            // O snapshot não guarda foto: a cor da peça vira a miniatura.
+                            const corHex = CORES[item.atributos?.cor]?.hex;
                             const atributos =
                                 item.atributos && typeof item.atributos === 'object'
                                     ? Object.entries(item.atributos)
@@ -122,23 +156,35 @@ export default function DetalhesPedido() {
                                     className="pedido-item"
                                     key={item.produtoId}
                                 >
+                                    <span
+                                        className={`pedido-item__midia ${corHex === 'estampa' ? 'amostra-cor--estampa' : ''}`}
+                                        style={corHex && corHex !== 'estampa' ? { background: corHex } : undefined}
+                                        aria-hidden="true"
+                                    >
+                                        <Icone nome="etiqueta" tamanho={18} />
+                                    </span>
                                     <div className="pedido-item__info">
                                         <span className="pedido-item__nome">
                                             {item.nome ||
-                                                `Produto ${item.produtoId}`}
+                                                `Peça ${item.produtoId}`}
                                         </span>
                                         {atributos.length > 0 && (
                                             <ul className="pedido-item__atributos">
-                                                {atributos.map(
-                                                    ([chave, valor]) => (
+                                                {atributos.map(([chave, valor]) => {
+                                                    const [rotulo, texto] = descreverAtributo(
+                                                        chave,
+                                                        valor,
+                                                        formatarReais
+                                                    );
+                                                    return (
                                                         <li key={chave}>
                                                             <span className="pedido-item__atributo-chave">
-                                                                {chave}:
+                                                                {rotulo}:
                                                             </span>{' '}
-                                                            {String(valor)}
+                                                            {texto}
                                                         </li>
-                                                    )
-                                                )}
+                                                    );
+                                                })}
                                             </ul>
                                         )}
                                     </div>
